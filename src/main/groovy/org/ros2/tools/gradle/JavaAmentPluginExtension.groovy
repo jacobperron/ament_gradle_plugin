@@ -21,9 +21,14 @@ import org.gradle.api.ProjectEvaluationListener
 import org.gradle.api.ProjectState
 import org.gradle.api.artifacts.DependencyResolutionListener
 import org.gradle.api.artifacts.ResolvableDependencies
+import org.gradle.api.tasks.Copy
 import org.gradle.api.tasks.compile.AbstractCompile
 import org.gradle.jvm.application.tasks.CreateStartScripts
 import org.gradle.api.internal.plugins.StartScriptGenerator
+
+import java.nio.file.Files
+import java.nio.file.FileSystems
+import java.nio.file.StandardCopyOption
 
 class AmentEntryPoints {
   final project
@@ -53,6 +58,33 @@ class JavaAmentPluginExtension extends BaseAmentPluginExtension {
     }
   }
 
+  def installPackageXml() {
+    def packageXmlPath = FileSystems.getDefault().getPath(this.sourceSpace, 'package.xml')
+    def installPath = FileSystems.getDefault().getPath(this.installSpace, 'share', this.packageManifestName, 'package.xml')
+    // Ensure the parent directories exist
+    Files.createDirectories(installPath.getParent())
+    Files.copy(packageXmlPath, installPath, StandardCopyOption.REPLACE_EXISTING)
+    // TODO(jacobperron): Consider using Copy task instead, but not sure why it's not working
+    // def packageXmlPath = [this.sourceSpace, 'package.xml'].join(File.separator)
+    // def installPath =  [this.installSpace, 'share', this.packageManifestName].join(File.separator)
+    // project.task('installPackageXml', type: Copy, dependsOn: 'compileJava') {
+    //   from packageXmlPath
+    //   into installPath
+    //   description 'Install the package.xml file to the share directory.'
+    // }
+  }
+
+  def registerAmentPackage() {
+    def markerFilePath = FileSystems.getDefault().getPath(
+      this.installSpace, 'share', 'ament_index', 'resource_index', 'packages', this.packageManifestName)
+    // Ensure the parent directories exist
+    Files.createDirectories(markerFilePath.getParent())
+    // Create a marker file if it doesn't exist
+    if (!Files.exists(markerFilePath)) {
+      Files.createFile(markerFilePath)
+    }
+  }
+
   def updateJavaDependencies() {
     def compileDeps = project.getConfigurations().getByName('compile').getDependencies()
     def fileDeps = project.files(project.ament.dependencies.split(':').collect {
@@ -62,6 +94,9 @@ class JavaAmentPluginExtension extends BaseAmentPluginExtension {
   }
 
   def setup() {
+    installPackageXml()
+    registerAmentPackage()
+
     project.plugins.withType(org.gradle.api.plugins.JavaPlugin) {
       project.getGradle().addListener(new DependencyResolutionListener() {
           @Override
